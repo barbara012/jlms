@@ -90,3 +90,7 @@ npm run tauri build    # 打包 .app / .dmg
 - **P2 规则分流** — 规则 / 规则集管理、命中测试
 - **P3 TUN** — 特权 helper 提权、虚拟网卡全局接管
 - *(v1 之后)* — MITM 抓包、脚本 / 模块、移动端
+
+## License
+
+MIT
