@@ -142,10 +142,14 @@ jobs:
 
           if asset["name"].endswith(".zip"):
               with zipfile.ZipFile(tmp_path) as archive:
-                  exe_name = "mihomo.exe"
-                  member = next((item for item in archive.namelist() if item.endswith(exe_name)), None)
+                  members = []
+                  for item in archive.namelist():
+                      base_name = pathlib.PurePosixPath(item).name.lower()
+                      if base_name.startswith("mihomo") and base_name.endswith(".exe"):
+                          members.append(item)
+                  member = members[0] if members else None
                   if member is None:
-                      raise SystemExit("压缩包中未找到 mihomo.exe")
+                      raise SystemExit(f"压缩包中未找到 mihomo 可执行文件: {archive.namelist()}")
                   with archive.open(member) as src, open(target_path, "wb") as dst:
                       shutil.copyfileobj(src, dst)
           elif asset["name"].endswith(".gz"):
