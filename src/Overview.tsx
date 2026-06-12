@@ -303,6 +303,16 @@ function formatNetworkLabel(proxy: SystemProxyStatus | null) {
   return raw.toUpperCase();
 }
 
+function normalizeSystemProxyError(error: string) {
+  if (
+    error.includes("system proxy is only supported on macOS") ||
+    error.includes("not implemented on this platform yet")
+  ) {
+    return "当前版本尚未实现此平台的系统代理控制。";
+  }
+  return error;
+}
+
 function totalOf(conn: ConnectionItem) {
   return (conn.download ?? 0) + (conn.upload ?? 0);
 }
@@ -524,7 +534,7 @@ export function Overview({ status }: { status: CoreStatus | null }) {
     try {
       setProxy(await api.systemProxyStatus());
     } catch (e) {
-      setProxyError(String(e));
+      setProxyError(normalizeSystemProxyError(String(e)));
     }
   }, []);
 
@@ -600,7 +610,7 @@ export function Overview({ status }: { status: CoreStatus | null }) {
       const next = await api.systemProxySet(!(proxy?.enabled ?? false));
       setProxy(next);
     } catch (e) {
-      setProxyError(String(e));
+      setProxyError(normalizeSystemProxyError(String(e)));
     } finally {
       setProxyBusy(false);
     }

@@ -40,7 +40,7 @@ jobs:
               src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.app.tar.gz
               src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.dmg
               src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.app
-          - os: macos-13
+          - os: macos-latest
             platform_name: macos-intel
             rust_target: x86_64-apple-darwin
             sidecar_path: src-tauri/binaries/mihomo-x86_64-apple-darwin
