@@ -177,9 +177,12 @@ function App() {
   const refresh = useCallback(async () => {
     try {
       const next = await api.coreStatus();
-      setCoreError((prev) =>
-        next.running ? null : prev ?? "内核未启动，代理不可用。请检查 mihomo sidecar 是否被系统拦截或损坏。"
-      );
+      setCoreError((prev) => {
+        if (next.running || !next.has_profiles) {
+          return null;
+        }
+        return prev ?? "内核未启动，代理不可用。请检查 mihomo sidecar 是否被系统拦截或损坏。";
+      });
       setStatus((prev) =>
         prev &&
         prev.running === next.running &&
@@ -235,7 +238,7 @@ function App() {
       void refresh();
     });
     const exitPromise = listen<number | null>("core://exit", () => {
-      setCoreError("内核未启动，代理不可用。请检查 mihomo sidecar 是否被系统拦截或损坏。");
+      setCoreError(null);
       void refresh();
     });
 

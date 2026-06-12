@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type CoreStatus = {
   running: boolean;
+  has_profiles: boolean;
   version: string | null;
   mixed_port: number;
   controller: string;
@@ -73,5 +74,7 @@ export const api = {
     invoke<Profile>("profiles_import_file", { path, name: name || null }),
   profilesSelect: (id: string) => invoke<void>("profiles_select", { id }),
   profilesUpdate: (id: string) => invoke<Profile>("profiles_update", { id }),
+  profilesRename: (id: string, name: string) =>
+    invoke<Profile>("profiles_rename", { id, name }),
   profilesDelete: (id: string) => invoke<void>("profiles_delete", { id }),
 };
