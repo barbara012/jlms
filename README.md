@@ -83,6 +83,54 @@ npm run tauri build    # 打包 .app / .dmg
   - 例如：`v1.19.27`
   - 留空时自动使用官方 latest release
 
+## macOS 下载后提示 "damaged"
+
+如果你下载 GitHub Actions 产出的 macOS 包后，打开时看到类似提示：
+
+```text
+"JLMS" is damaged and can't be opened. You should move it to the Trash.
+```
+
+这通常不是应用真的损坏了，而是 `macOS Gatekeeper` 对未签名 / 未公证、且带有浏览器下载隔离标记的应用进行了拦截。
+
+常见原因：
+
+- GitHub Actions 产物当前未做 Apple Developer 签名
+- 也未做 notarization（公证）
+- 通过 Chrome / Safari 下载后，文件会带上 `com.apple.quarantine` 标记
+
+本地测试时可先手动移除隔离标记：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/JLMS.app
+```
+
+如果应用还在下载目录，可按实际路径执行，例如：
+
+```bash
+xattr -dr com.apple.quarantine ~/Downloads/JLMS.app
+```
+
+如果移除隔离标记后仍无法打开，可继续执行以下命令查看系统校验结果：
+
+```bash
+spctl --assess --verbose=4 /Applications/JLMS.app
+codesign --verify --deep --strict --verbose=2 /Applications/JLMS.app
+```
+
+说明：
+
+- 本地自行构建的包通常不会因为浏览器下载而自动带上隔离标记
+- GitHub Actions 下载产物更容易遇到这个问题
+- 这是分发链路问题，不一定代表应用本身已损坏
+
+正式分发时，推荐补齐以下步骤：
+
+- Developer ID Application 签名
+- 对内嵌 sidecar 一并签名
+- notarization 公证
+- staple 公证票据
+
 ## 路线图
 
 - **P0 脚手架** — Tauri 骨架 + 内核 sidecar 管理 + 状态仪表盘 ← 进行中
