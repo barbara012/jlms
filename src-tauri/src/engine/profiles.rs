@@ -168,6 +168,24 @@ pub fn delete(app: &AppHandle, id: &str) -> Result<(), String> {
     save_index(app, &index)
 }
 
+pub fn rename(app: &AppHandle, id: &str, name: &str) -> Result<Profile, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("profile name cannot be empty".into());
+    }
+
+    let mut index = load_index(app);
+    let profile = index
+        .profiles
+        .iter_mut()
+        .find(|p| p.id == id)
+        .ok_or("profile not found")?;
+    profile.name = trimmed.to_string();
+    let updated = profile.clone();
+    save_index(app, &index)?;
+    Ok(updated)
+}
+
 async fn fetch(url: &str) -> Result<String, String> {
     // A clash-family UA makes most panels return Clash YAML. Avoid "surge" in the
     // UA — some panels serve a Surge .conf when they see it.

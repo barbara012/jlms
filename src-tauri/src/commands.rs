@@ -17,6 +17,7 @@ use crate::request_tray_menu_sync;
 #[derive(Serialize)]
 pub struct CoreStatus {
     pub running: bool,
+    pub has_profiles: bool,
     pub version: Option<String>,
     pub mixed_port: u16,
     pub controller: String,
@@ -178,6 +179,7 @@ pub async fn core_status(
     manager: State<'_, CoreManager>,
 ) -> Result<CoreStatus, String> {
     let running = manager.is_running();
+    let has_profiles = !profiles::load_index(&app).profiles.is_empty();
     let params = manager.params();
     let saved_mode = settings::load_mode(&app);
 
@@ -197,6 +199,7 @@ pub async fn core_status(
 
     Ok(CoreStatus {
         running,
+        has_profiles,
         version,
         mixed_port,
         controller,
@@ -424,6 +427,11 @@ pub async fn profiles_update(
         apply_active(&app, &manager).await?;
     }
     Ok(profile)
+}
+
+#[tauri::command]
+pub fn profiles_rename(app: AppHandle, id: String, name: String) -> Result<Profile, String> {
+    profiles::rename(&app, &id, &name)
 }
 
 #[tauri::command]

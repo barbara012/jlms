@@ -1004,6 +1004,7 @@ pub fn run() {
             commands::profiles_import_file,
             commands::profiles_select,
             commands::profiles_update,
+            commands::profiles_rename,
             commands::profiles_delete,
         ])
         .setup(|app| {
