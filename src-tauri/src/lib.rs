@@ -101,7 +101,27 @@ struct ClientSnapshot {
     totals: HashMap<String, u64>,
 }
 
+#[cfg(target_os = "macos")]
+fn hide_to_background(app: &tauri::AppHandle) {
+    let _ = app.hide();
+    let _ = app.set_dock_visibility(false);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn hide_to_background(app: &tauri::AppHandle) {
+    if let Some(main_window) = app.get_webview_window("main") {
+        let _ = main_window.hide();
+    }
+}
+
 fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        app.set_dock_visibility(true)
+            .map_err(|e| format!("show dock icon: {e}"))?;
+        app.show().map_err(|e| format!("show application: {e}"))?;
+    }
+
     let window = app
         .get_webview_window("main")
         .ok_or("main window not found")?;
@@ -837,9 +857,7 @@ fn install_close_behavior(app: &tauri::AppHandle) {
                 return;
             }
             api.prevent_close();
-            if let Some(main_window) = handle.get_webview_window("main") {
-                let _ = main_window.hide();
-            }
+            hide_to_background(&handle);
         }
     });
 }
