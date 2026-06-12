@@ -35,6 +35,8 @@ type ModeChangedPayload = {
   default_group: string;
 };
 
+const LOG_BUFFER_CAPACITY = 500;
+
 type ReleaseInfo = {
   tag_name?: string;
   html_url?: string;
@@ -666,6 +668,7 @@ function SettingsView({
                   ))}
           </div>
         </section>
+
       </div>
     </div>
   );
@@ -675,15 +678,41 @@ function LogsView() {
   const [logs, setLogs] = useState<string[]>([]);
   const pendingLogsRef = useRef<string[]>([]);
   const flushTimerRef = useRef<number | null>(null);
+  const logBufferRef = useRef<string[]>(Array.from({ length: LOG_BUFFER_CAPACITY }, () => ""));
+  const logBufferStartRef = useRef(0);
+  const logBufferSizeRef = useRef(0);
 
   useEffect(() => {
     let active = true;
+    const appendLogs = (batch: string[]) => {
+      if (batch.length === 0) return;
+      const buffer = logBufferRef.current;
+      let start = logBufferStartRef.current;
+      let size = logBufferSizeRef.current;
+
+      for (const line of batch) {
+        if (size < LOG_BUFFER_CAPACITY) {
+          buffer[(start + size) % LOG_BUFFER_CAPACITY] = line;
+          size += 1;
+          continue;
+        }
+        buffer[start] = line;
+        start = (start + 1) % LOG_BUFFER_CAPACITY;
+      }
+
+      logBufferStartRef.current = start;
+      logBufferSizeRef.current = size;
+
+      const ordered = Array.from({ length: size }, (_, index) => buffer[(start + index) % LOG_BUFFER_CAPACITY]);
+      setLogs(ordered);
+    };
+
     const flush = () => {
       flushTimerRef.current = null;
       if (!active || pendingLogsRef.current.length === 0) return;
       const batch = pendingLogsRef.current;
       pendingLogsRef.current = [];
-      setLogs((prev) => [...prev, ...batch].slice(-500));
+      appendLogs(batch);
     };
     const scheduleFlush = () => {
       if (flushTimerRef.current !== null) return;
@@ -698,6 +727,8 @@ function LogsView() {
     return () => {
       active = false;
       pendingLogsRef.current = [];
+      logBufferStartRef.current = 0;
+      logBufferSizeRef.current = 0;
       if (flushTimerRef.current !== null) {
         window.clearTimeout(flushTimerRef.current);
         flushTimerRef.current = null;

@@ -58,12 +58,20 @@ export function Traffic() {
 
   useEffect(() => {
     let stop = () => {};
+    let disposed = false;
     openStream<TrafficSample>("traffic", (sample) => {
       const point = { ...sample, ts: Date.now() };
       setCurrent(sample);
       setHistory((prev) => [...prev, point].slice(-MAX_POINTS));
-    }, { throttleMs: 250 }).then((f) => (stop = f));
+    }, { throttleMs: 250 }).then((f) => {
+      if (disposed) {
+        f();
+        return;
+      }
+      stop = f;
+    });
     return () => {
+      disposed = true;
       stop();
     };
   }, []);
