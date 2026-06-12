@@ -209,6 +209,18 @@ body {
   white-space: nowrap;
 }
 
+.brand-version-text {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .nav {
   display: flex;
   flex-direction: column;
@@ -565,6 +577,15 @@ body {
 
 .mode-segmented {
   background: #fff;
+}
+
+:root[data-theme="dark"] .mode-segmented {
+  background: rgba(24, 33, 43, 0.96);
+  border-color: rgba(111, 127, 144, 0.34);
+}
+
+:root[data-theme="dark"] .mode-segmented button:not(.active) {
+  color: var(--text-dim);
 }
 
 .theme-segmented button {

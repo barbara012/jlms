@@ -146,6 +146,7 @@ function App() {
   const [view, setView] = useState<View>("overview");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => getInitialThemePreference());
   const [systemTheme, setSystemTheme] = useState<Theme>(() => getSystemTheme());
+  const [appVersion, setAppVersion] = useState<string>("—");
   const [status, setStatus] = useState<CoreStatus | null>(null);
   const [systemProxy, setSystemProxy] = useState<SystemProxyStatus | null>(null);
   const [coreError, setCoreError] = useState<string | null>(null);
@@ -280,6 +281,14 @@ function App() {
     return () => media.removeEventListener("change", applySystemTheme);
   }, []);
 
+  useEffect(() => {
+    void getVersion()
+      .then((version) => setAppVersion(normalizeVersion(version)))
+      .catch(() => {
+        /* ignore app version lookup failures */
+      });
+  }, []);
+
   const checkForAppUpdate = useCallback(async (manual = false) => {
     if (manual) {
       setUpdateCheckBusy(true);
@@ -409,7 +418,11 @@ function App() {
           <div className="brand-text">
             <div className="brand-title-row">
               <h1>JLMS</h1>
-              {updateBanner && <span className="brand-update-badge">新版本 {updateBanner.version}</span>}
+              {updateBanner ? (
+                <span className="brand-update-badge">新版本 {updateBanner.version}</span>
+              ) : (
+                <span className="brand-version-text">{appVersion}</span>
+              )}
             </div>
             <p>Mihomo 内核</p>
           </div>

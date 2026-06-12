@@ -103,6 +103,9 @@ struct ClientSnapshot {
 
 #[cfg(target_os = "macos")]
 fn hide_to_background(app: &tauri::AppHandle) {
+    if let Some(main_window) = app.get_webview_window("main") {
+        let _ = main_window.hide();
+    }
     let _ = app.hide();
     let _ = app.set_dock_visibility(false);
 }
