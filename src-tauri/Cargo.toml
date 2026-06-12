@@ -1,6 +1,6 @@
 [package]
 name = "jlms"
-version = "0.1.0"
+version = "0.1.2"
 description = "JLMS — a rule-based proxy client (Mihomo core + Tauri shell)"
 authors = ["hwh"]
 edition = "2021"
