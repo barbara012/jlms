@@ -1,0 +1,179 @@
+name: Build Desktop Bundles
+
+on:
+  workflow_dispatch:
+    inputs:
+      mihomo_version:
+        description: "mihomo 版本，留空则使用 latest，例如 v1.19.27"
+        required: false
+        default: ""
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform_name: windows-x64
+            rust_target: x86_64-pc-windows-msvc
+            sidecar_path: src-tauri\binaries\mihomo-x86_64-pc-windows-msvc.exe
+            sidecar_patterns: '^mihomo-windows-amd64-v1-.*\.zip$|^mihomo-windows-amd64-compatible-.*\.zip$|^mihomo-windows-amd64-v\d+\.\d+\.\d+.*\.zip$|^mihomo-windows-amd64-v3-.*\.zip$|^mihomo-windows-amd64-v2-.*\.zip$'
+            asset_glob: |
+              src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.msi
+              src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.exe
+              src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.zip
+          - os: macos-latest
+            platform_name: macos-apple-silicon
+            rust_target: aarch64-apple-darwin
+            sidecar_path: src-tauri/binaries/mihomo-aarch64-apple-darwin
+            sidecar_patterns: '^mihomo-darwin-arm64-.*\.gz$|^mihomo-darwin-arm64-v\d+\.\d+\.\d+.*\.gz$'
+            asset_glob: |
+              src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.app.tar.gz
+              src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.dmg
+              src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.app
+          - os: macos-13
+            platform_name: macos-intel
+            rust_target: x86_64-apple-darwin
+            sidecar_path: src-tauri/binaries/mihomo-x86_64-apple-darwin
+            sidecar_patterns: '^mihomo-darwin-amd64-compatible-.*\.gz$|^mihomo-darwin-amd64-v1-.*\.gz$|^mihomo-darwin-amd64-.*\.gz$'
+            asset_glob: |
+              src-tauri/target/x86_64-apple-darwin/release/bundle/**/*.app.tar.gz
+              src-tauri/target/x86_64-apple-darwin/release/bundle/**/*.dmg
+              src-tauri/target/x86_64-apple-darwin/release/bundle/**/*.app
+
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_TERM_COLOR: always
+      MIHOMO_VERSION_INPUT: ${{ github.event.inputs.mihomo_version }}
+      SIDE_CAR_PATH: ${{ matrix.sidecar_path }}
+      SIDE_CAR_PATTERNS: ${{ matrix.sidecar_patterns }}
+      RUST_TARGET: ${{ matrix.rust_target }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Download mihomo sidecar
+        shell: python
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          import gzip
+          import io
+          import json
+          import os
+          import pathlib
+          import re
+          import shutil
+          import sys
+          import urllib.request
+          import zipfile
+
+          version = os.environ.get("MIHOMO_VERSION_INPUT", "").strip()
+          if version and not version.startswith("v"):
+              version = f"v{version}"
+
+          api_url = (
+              "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
+              if not version
+              else f"https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/{version}"
+          )
+
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "jlms-build-workflow",
+          }
+          token = os.environ.get("GITHUB_TOKEN")
+          if token:
+              headers["Authorization"] = f"Bearer {token}"
+
+          req = urllib.request.Request(api_url, headers=headers)
+          with urllib.request.urlopen(req) as resp:
+              release = json.load(resp)
+
+          patterns = [re.compile(item) for item in os.environ["SIDE_CAR_PATTERNS"].split("|")]
+          asset = None
+          for candidate in release.get("assets", []):
+              name = candidate.get("name", "")
+              if any(pattern.match(name) for pattern in patterns):
+                  asset = candidate
+                  break
+
+          if asset is None:
+              raise SystemExit(f"未找到匹配的 mihomo sidecar 资产: release={release.get('tag_name')}")
+
+          target_path = pathlib.Path(os.environ["SIDE_CAR_PATH"])
+          target_path.parent.mkdir(parents=True, exist_ok=True)
+          tmp_path = pathlib.Path(os.environ["RUNNER_TEMP"]) / asset["name"]
+
+          download_req = urllib.request.Request(asset["browser_download_url"], headers=headers)
+          with urllib.request.urlopen(download_req) as resp, open(tmp_path, "wb") as fh:
+              shutil.copyfileobj(resp, fh)
+
+          if asset["name"].endswith(".zip"):
+              with zipfile.ZipFile(tmp_path) as archive:
+                  exe_name = "mihomo.exe"
+                  member = next((item for item in archive.namelist() if item.endswith(exe_name)), None)
+                  if member is None:
+                      raise SystemExit("压缩包中未找到 mihomo.exe")
+                  with archive.open(member) as src, open(target_path, "wb") as dst:
+                      shutil.copyfileobj(src, dst)
+          elif asset["name"].endswith(".gz"):
+              with gzip.open(tmp_path, "rb") as src, open(target_path, "wb") as dst:
+                  shutil.copyfileobj(src, dst)
+          else:
+              raise SystemExit(f"不支持的 sidecar 资产格式: {asset['name']}")
+
+          if os.name != "nt":
+              target_path.chmod(0o755)
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              env_file.write(f"MIHOMO_RELEASE_TAG={release.get('tag_name', '')}\n")
+              env_file.write(f"MIHOMO_ASSET_NAME={asset['name']}\n")
+
+      - name: Build bundle
+        run: npm run tauri build -- --target ${{ matrix.rust_target }}
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jlms-${{ matrix.platform_name }}-${{ github.ref_name || github.run_number }}
+          path: ${{ matrix.asset_glob }}
+          if-no-files-found: error
+
+      - name: Publish release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: ${{ matrix.asset_glob }}

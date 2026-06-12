@@ -59,20 +59,23 @@ npm run tauri build    # 打包 .app / .dmg
 启动后内核会自动拉起；仪表盘显示内核版本、混合端口与控制接口，可启停/重启内核。
 系统代理走 `127.0.0.1:7890`（HTTP + SOCKS5 混合端口）。
 
-## GitHub Actions 打 Windows 包
+## GitHub Actions 自动构建桌面包
 
-仓库内已提供 Windows 自动构建工作流：
+仓库内已提供统一的桌面端自动构建工作流：
 
-- 工作流文件：`.github/workflows/windows-build.yml`
-- 触发方式 1：在 GitHub Actions 页面手动运行 `Build Windows Bundle`
-- 触发方式 2：push `v*` tag 时自动构建，并把产物上传到 GitHub Release
+- 工作流文件：`.github/workflows/build-desktop.yml`
+- 触发方式 1：在 GitHub Actions 页面手动运行 `Build Desktop Bundles`
+- 触发方式 2：push 到 `main` 时自动构建
+- 触发方式 3：push `v*` tag 时自动构建，并把产物上传到 GitHub Release
 
 默认行为：
 
-- 在 `windows-latest` runner 上构建 `x86_64-pc-windows-msvc`
-- 自动从 `MetaCubeX/mihomo` release 下载 Windows x64 的 `mihomo` sidecar
-- 优先选择兼容性更高的 `amd64-v1` 资产；如果官方命名变化，则按兼容优先级自动 fallback
-- 打包完成后上传 `.msi` / `.exe` / `.zip` 到 workflow artifacts
+- 在 `windows-latest` runner 上构建 Windows x64
+- 在 `macos-latest` runner 上构建 Apple Silicon macOS 包
+- 在 `macos-13` runner 上构建 Intel macOS 包
+- 自动从 `MetaCubeX/mihomo` release 下载对应平台的 `mihomo` sidecar
+- 打包完成后上传平台产物到 workflow artifacts
+- tag 构建时会把多平台产物一起上传到 GitHub Release
 
 手动运行时可选输入：
 
