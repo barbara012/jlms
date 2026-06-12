@@ -49,12 +49,12 @@ type UpdateBannerState = {
 };
 
 const VIEW_META: Record<View, { title: string }> = {
-  overview: { title: "Overview" },
-  requests: { title: "Process" },
-  policy: { title: "Policy" },
-  profiles: { title: "Profile" },
-  logs: { title: "Logs" },
-  settings: { title: "Settings" },
+  overview: { title: "概览" },
+  requests: { title: "进程" },
+  policy: { title: "策略" },
+  profiles: { title: "订阅" },
+  logs: { title: "日志" },
+  settings: { title: "设置" },
 };
 
 const NAV_SECTIONS: {
@@ -62,25 +62,25 @@ const NAV_SECTIONS: {
   items: { id: View; label: string; Icon: LucideIcon }[];
 }[] = [
   {
-    title: "Activity",
-    items: [{ id: "overview", label: "Overview", Icon: LayoutGrid }],
+    title: "概览",
+    items: [{ id: "overview", label: "概览", Icon: LayoutGrid }],
   },
   {
-    title: "Clients",
-    items: [{ id: "requests", label: "Process", Icon: Laptop2 }],
+    title: "客户端",
+    items: [{ id: "requests", label: "进程", Icon: Laptop2 }],
   },
   {
-    title: "Proxies",
+    title: "代理",
     items: [
-      { id: "policy", label: "Policy", Icon: Network },
-      { id: "profiles", label: "Profile", Icon: Waypoints },
+      { id: "policy", label: "策略", Icon: Network },
+      { id: "profiles", label: "订阅", Icon: Waypoints },
     ],
   },
   {
-    title: "System",
+    title: "系统",
     items: [
-      { id: "settings", label: "Settings", Icon: SlidersHorizontal },
-      { id: "logs", label: "Logs", Icon: Logs },
+      { id: "settings", label: "设置", Icon: SlidersHorizontal },
+      { id: "logs", label: "日志", Icon: Logs },
     ],
   },
 ];
@@ -98,6 +98,7 @@ const THEMES: { id: ThemePreference; label: string; Icon: LucideIcon }[] = [
   { id: "dark", label: "暗色", Icon: MoonStar },
 ];
 const RELEASES_LATEST_API = "https://api.github.com/repos/barbara012/jlms/releases/latest";
+const GITHUB_REPO_URL = "https://github.com/barbara012/jlms";
 const IGNORED_UPDATE_VERSION_KEY = "jlms-ignored-update-version:v1";
 
 function normalizeVersion(version: string) {
@@ -398,6 +399,14 @@ function App() {
     }
   };
 
+  const openRepository = async () => {
+    try {
+      await openUrl(GITHUB_REPO_URL);
+    } catch {
+      /* ignore external opener failures */
+    }
+  };
+
   const dismissUpdateBanner = useCallback(() => {
     if (!updateBanner?.version) return;
     setIgnoredUpdateVersion(updateBanner.version);
@@ -554,6 +563,7 @@ function App() {
             updateCheckMessage={updateCheckMessage}
             onCheckUpdate={() => void checkForAppUpdate(true)}
             onOpenLatestRelease={() => void openLatestRelease()}
+            onOpenRepository={() => void openRepository()}
             onRestoreUpdateReminder={() => void restoreUpdateReminder()}
           />
         )}
@@ -574,6 +584,7 @@ function SettingsView({
   updateCheckMessage,
   onCheckUpdate,
   onOpenLatestRelease,
+  onOpenRepository,
   onRestoreUpdateReminder,
 }: {
   themePreference: ThemePreference;
@@ -584,21 +595,22 @@ function SettingsView({
   updateCheckMessage: string | null;
   onCheckUpdate: () => void;
   onOpenLatestRelease: () => void;
+  onOpenRepository: () => void;
   onRestoreUpdateReminder: () => void;
 }) {
   return (
     <div className="view settings-view">
       <section className="page-hero">
         <div>
-          <div className="activity-kicker">System</div>
-          <h1 className="activity-title">Settings</h1>
+          <div className="activity-kicker">系统</div>
+          <h1 className="activity-title">设置</h1>
           <p className="page-hero-sub">管理主题与系统层偏好设置。</p>
         </div>
       </section>
 
       <div className="settings-grid">
         <section className="surge-card settings-card">
-          <div className="settings-card-title">Theme</div>
+          <div className="settings-card-title">主题</div>
 
           <div className="segmented settings-theme-segmented" aria-label="主题设置">
             {THEMES.map(({ id, label, Icon }) => (
@@ -611,7 +623,7 @@ function SettingsView({
         </section>
 
         <section className="surge-card settings-card">
-          <div className="settings-card-title">Update</div>
+          <div className="settings-card-title">更新</div>
           <div className="settings-actions">
             <button className="settings-action-button" onClick={onCheckUpdate} disabled={updateCheckBusy}>
               <RefreshCw size={14} className={updateCheckBusy ? "spin" : ""} />
@@ -632,10 +644,26 @@ function SettingsView({
           <div className="settings-update-text">
             {updateCheckMessage ??
               (updateBanner
-                ? `当前发现新版本 JLMS ${updateBanner.version}，你可以直接跳转到 GitHub Releases 下载。`
+                ? (
+                  <>
+                    当前发现新版本 JLMS {updateBanner.version}，你可以直接跳转到
+                    <button type="button" className="settings-inline-link" onClick={onOpenRepository}>
+                      GitHub
+                    </button>
+                    仓库查看发布信息。
+                  </>
+                )
                 : ignoredUpdateVersion
                   ? `当前已忽略 JLMS ${ignoredUpdateVersion} 的更新提示，你可以随时恢复提醒。`
-                  : "手动检查 GitHub Releases 中是否已有新版本。")}
+                  : (
+                    <>
+                      手动检查
+                      <button type="button" className="settings-inline-link" onClick={onOpenRepository}>
+                        GitHub
+                      </button>
+                      仓库中是否已有新版本。
+                    </>
+                  ))}
           </div>
         </section>
       </div>
@@ -682,21 +710,26 @@ function LogsView() {
     <div className="view">
       <section className="page-hero">
         <div>
-          <div className="activity-kicker">System</div>
-          <h1 className="activity-title">Logs</h1>
+          <div className="activity-kicker">系统</div>
+          <h1 className="activity-title">日志</h1>
           <p className="page-hero-sub">查看 Mihomo 内核输出与运行时事件，便于排查连接和订阅问题。</p>
         </div>
       </section>
       <div className="logs logs-surge">
         <div className="logs-head">
           <div className="logs-head-main">
-            <div className="surge-card-label">Runtime Console</div>
             <div className="logs-head-sub">最近 {logs.length} 条运行日志</div>
           </div>
         </div>
-        <div className="logs-body">
+        <div className={logs.length === 0 ? "logs-body logs-body-empty" : "logs-body"}>
           {logs.length === 0 ? (
-            <div className="logs-empty">暂无日志…</div>
+            <div className="logs-empty">
+              <div className="logs-empty-icon">
+                <Logs size={22} />
+              </div>
+              <div className="logs-empty-title">暂无运行日志</div>
+              <div className="logs-empty-text">Mihomo 内核启动并产生输出后，这里会实时显示最新日志。</div>
+            </div>
           ) : (
             logs.map((line, i) => (
               <div key={i} className="log-line">

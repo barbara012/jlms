@@ -933,11 +933,13 @@ fn install_tray(app: &mut tauri::App) -> tauri::Result<()> {
             let handle = app.clone();
             tauri::async_runtime::spawn(async move {
                 let manager = handle.state::<CoreManager>();
-                let current = engine::system_proxy::status(&commands::proxy_target(&manager))
+                let target = commands::proxy_target(&manager);
+                let current = engine::system_proxy::status(&target)
                     .map(|status| status.enabled)
                     .unwrap_or(false);
                 if let Err(err) =
-                    commands::set_system_proxy_with_handle(&handle, &manager, !current)
+                    commands::set_system_proxy_with_target_async(handle.clone(), target, !current)
+                        .await
                 {
                     eprintln!("[fk_surge] tray toggle system proxy failed: {err}");
                 }
