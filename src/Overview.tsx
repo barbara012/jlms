@@ -407,13 +407,14 @@ function deriveConnectionStats(
   }
 
   const overall = direct + proxy;
-  const trafficRows = [...groups.values()]
-    .map((item) => ({
-      ...item,
-      subtitle: trafficContentTab === "policy" ? `${item.count} 个连接` : item.subtitle,
-    }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 6);
+  const trafficRows = Array.from(groups.values());
+  if (trafficContentTab === "policy") {
+    trafficRows.forEach((item) => {
+      item.subtitle = `${item.count} 个连接`;
+    });
+  }
+  trafficRows.sort((a, b) => b.total - a.total);
+  trafficRows.length = Math.min(trafficRows.length, 6);
 
   return {
     uniqueProcesses: processSet.size,
@@ -455,11 +456,25 @@ export function Overview({ status }: { status: CoreStatus | null }) {
   useEffect(() => {
     let stopT = () => {};
     let stopC = () => {};
+    let disposed = false;
     openStream<TrafficSample>("traffic", setTraffic, { throttleMs: OVERVIEW_TRAFFIC_THROTTLE_MS }).then(
-      (f) => (stopT = f),
+      (f) => {
+        if (disposed) {
+          f();
+          return;
+        }
+        stopT = f;
+      },
     );
-    openStream<ConnectionsSnapshot>("connections", setConn, { throttleMs: 400 }).then((f) => (stopC = f));
+    openStream<ConnectionsSnapshot>("connections", setConn, { throttleMs: 400 }).then((f) => {
+      if (disposed) {
+        f();
+        return;
+      }
+      stopC = f;
+    });
     return () => {
+      disposed = true;
       stopT();
       stopC();
     };

@@ -230,6 +230,8 @@ async fn collect_tray_menu_snapshot(app: &tauri::AppHandle) -> TrayMenuSnapshot 
         .map(|status| status.enabled)
         .unwrap_or(false);
     let policy_groups = load_tray_policy_groups(app).await;
+    let latency_targets = collect_latency_targets(&policy_groups);
+    prune_tray_delays(app, &latency_targets);
     ensure_selected_policy_delays(app, &policy_groups).await;
     let delays = tray_delays_snapshot(app);
     let connection_summary = load_connection_summary(app, &policy_groups, &delays).await;
@@ -277,6 +279,13 @@ fn merge_tray_delays(app: &tauri::AppHandle, updates: HashMap<String, Option<u32
     for (name, delay) in updates {
         delays.insert(name, delay);
     }
+}
+
+fn prune_tray_delays(app: &tauri::AppHandle, retain_names: &[String]) {
+    let retain = retain_names.iter().cloned().collect::<HashSet<_>>();
+    let state = app.state::<TrayRuntimeState>();
+    let mut delays = state.delays.lock().unwrap();
+    delays.retain(|name, _| retain.contains(name));
 }
 
 fn set_latency_testing(app: &tauri::AppHandle, value: bool) {
@@ -907,8 +916,9 @@ fn install_tray(app: &mut tauri::App) -> tauri::Result<()> {
             tauri::async_runtime::spawn(async move {
                 set_latency_testing(&handle, true);
                 let groups = load_tray_policy_groups(&handle).await;
-                let measured =
-                    measure_delay_nodes(&handle, &collect_latency_targets(&groups)).await;
+                let targets = collect_latency_targets(&groups);
+                prune_tray_delays(&handle, &targets);
+                let measured = measure_delay_nodes(&handle, &targets).await;
                 merge_tray_delays(&handle, measured);
                 set_latency_testing(&handle, false);
                 request_tray_menu_sync(&handle);

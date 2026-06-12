@@ -208,13 +208,75 @@ jobs:
             range="${current_tag}"
           fi
 
-          commits="$(git log "$range" --no-merges --pretty=format:'- %s (%h)' || true)"
+          features="$(mktemp)"
+          fixes="$(mktemp)"
+          performance="$(mktemp)"
+          builds="$(mktemp)"
+          others="$(mktemp)"
+
+          git log "$range" --no-merges --pretty=format:'%s|%h' | while IFS='|' read -r subject short_hash; do
+            [[ -z "${subject}" ]] && continue
+
+            if [[ "$subject" =~ ^Release\ v[0-9] ]] || [[ "$subject" =~ ^build\(release\): ]] || [[ "$subject" =~ ^chore\(release\): ]]; then
+              continue
+            fi
+
+            entry="- ${subject} (${short_hash})"
+            lower_subject="$(printf '%s' "$subject" | tr '[:upper:]' '[:lower:]')"
+            case "$lower_subject" in
+              feat:*|feat\(*)
+                echo "$entry" >> "$features"
+                ;;
+              fix:*|fix\(*)
+                echo "$entry" >> "$fixes"
+                ;;
+              perf:*|perf\(*)
+                echo "$entry" >> "$performance"
+                ;;
+              build:*|build\(*)
+                echo "$entry" >> "$builds"
+                ;;
+              *)
+                echo "$entry" >> "$others"
+                ;;
+            esac
+          done
 
           {
             echo "## 更新日志"
-            if [[ -n "$commits" ]]; then
-              echo "$commits"
-            else
+            wrote_any=0
+            if [[ -s "$features" ]]; then
+              echo
+              echo "### 新功能"
+              cat "$features"
+              wrote_any=1
+            fi
+            if [[ -s "$fixes" ]]; then
+              echo
+              echo "### 修复"
+              cat "$fixes"
+              wrote_any=1
+            fi
+            if [[ -s "$performance" ]]; then
+              echo
+              echo "### 性能"
+              cat "$performance"
+              wrote_any=1
+            fi
+            if [[ -s "$builds" ]]; then
+              echo
+              echo "### 构建与发布"
+              cat "$builds"
+              wrote_any=1
+            fi
+            if [[ -s "$others" ]]; then
+              echo
+              echo "### 其他"
+              cat "$others"
+              wrote_any=1
+            fi
+            if [[ "$wrote_any" -eq 0 ]]; then
+              echo
               echo "- 版本发布"
             fi
             echo
@@ -228,6 +290,8 @@ jobs:
               echo "**完整对比**: ${compare_url}"
             fi
           } > RELEASE_NOTES.md
+
+          rm -f "$features" "$fixes" "$performance" "$builds" "$others"
 
       - name: Publish release assets
         uses: softprops/action-gh-release@v2

@@ -90,11 +90,20 @@ export function Requests() {
   const [viewportHeight, setViewportHeight] = useState(480);
   const deferredQuery = useDeferredValue(query);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const searchTextCacheRef = useRef<WeakMap<ConnectionItem, string>>(new WeakMap());
 
   useEffect(() => {
     let stop = () => {};
-    openStream<ConnectionsSnapshot>("connections", setSnapshot, { throttleMs: 500 }).then((f) => (stop = f));
+    let disposed = false;
+    openStream<ConnectionsSnapshot>("connections", setSnapshot, { throttleMs: 500 }).then((f) => {
+      if (disposed) {
+        f();
+        return;
+      }
+      stop = f;
+    });
     return () => {
+      disposed = true;
       stop();
     };
   }, []);
@@ -102,25 +111,33 @@ export function Requests() {
   const connections = snapshot?.connections ?? [];
   const total = (snapshot?.downloadTotal ?? 0) + (snapshot?.uploadTotal ?? 0);
 
-  const rankedConnections = useMemo(() => {
-    return connections
-      .map((conn) => ({ conn, total: totalTrafficOf(conn) }))
-      .sort((a, b) => b.total - a.total);
+  const sortedConnections = useMemo(() => {
+    const next = [...connections];
+    next.sort((a, b) => totalTrafficOf(b) - totalTrafficOf(a));
+    return next;
   }, [connections]);
 
   const derived = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
-    const filtered: ConnectionItem[] = [];
+    const filtered: ConnectionItem[] = q ? [] : sortedConnections;
     const processSet = new Set<string>();
     let directCount = 0;
 
-    for (const item of rankedConnections) {
-      const conn = item.conn;
-      if (q && !searchTextOf(conn).includes(q)) {
-        continue;
+    for (const conn of sortedConnections) {
+      if (q) {
+        const cached = searchTextCacheRef.current.get(conn);
+        const haystack = cached ?? searchTextOf(conn);
+        if (!cached) {
+          searchTextCacheRef.current.set(conn, haystack);
+        }
+        if (!haystack.includes(q)) {
+          continue;
+        }
       }
 
-      filtered.push(conn);
+      if (q) {
+        filtered.push(conn);
+      }
       const process = processOf(conn);
       if (process !== "未知进程") {
         processSet.add(process);
@@ -138,7 +155,7 @@ export function Requests() {
       proxyCount: filtered.length - directCount,
       processCount: processSet.size,
     };
-  }, [deferredQuery, rankedConnections]);
+  }, [deferredQuery, sortedConnections]);
 
   const filtered = derived.filtered;
   const directCount = derived.directCount;

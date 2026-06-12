@@ -61,12 +61,16 @@ export function Profiles({ onChanged }: { onChanged?: () => void }) {
       renameSelectPendingRef.current = false;
     };
 
+    let timeoutId: number | null = null;
     const frame = window.requestAnimationFrame(() => {
-      window.setTimeout(focusAndSelect, 0);
+      timeoutId = window.setTimeout(focusAndSelect, 0);
     });
 
     return () => {
       window.cancelAnimationFrame(frame);
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, [renameDraft?.id]);
 
