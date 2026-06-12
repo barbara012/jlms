@@ -1,0 +1,8 @@
+# Project-scoped cargo config.
+# Use a fast, reliable crates.io mirror (USTC) to avoid slow/stalled direct
+# downloads from static.crates.io. Remove this block to use crates.io directly.
+[source.crates-io]
+replace-with = "ustc"
+
+[source.ustc]
+registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"

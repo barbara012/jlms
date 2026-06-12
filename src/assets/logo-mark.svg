@@ -1,0 +1,14 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="fkSurgeBar" x1="26" y1="96" x2="102" y2="32" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#52D8F0" />
+      <stop offset="1" stop-color="#8AF08C" />
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="116" height="116" rx="28" fill="#07090D" />
+  <rect x="28" y="68" width="8" height="24" rx="4" fill="url(#fkSurgeBar)" />
+  <rect x="43" y="52" width="8" height="40" rx="4" fill="url(#fkSurgeBar)" />
+  <rect x="58" y="36" width="8" height="56" rx="4" fill="url(#fkSurgeBar)" />
+  <rect x="73" y="28" width="8" height="48" rx="4" fill="url(#fkSurgeBar)" />
+  <rect x="88" y="40" width="8" height="20" rx="4" fill="url(#fkSurgeBar)" />
+</svg>

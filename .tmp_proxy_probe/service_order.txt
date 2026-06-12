@@ -1,0 +1,25 @@
+An asterisk (*) denotes that a network service is disabled.
+(1) CDC DEVICE
+(Hardware Port: CDC DEVICE, Device: usbmodem20151006_11)
+
+(2) USB 10/100/1000 LAN
+(Hardware Port: USB 10/100/1000 LAN, Device: en8)
+
+(3) Thunderbolt Bridge
+(Hardware Port: Thunderbolt Bridge, Device: bridge0)
+
+(4) Wi-Fi
+(Hardware Port: Wi-Fi, Device: en0)
+
+(5) iPhone USB
+(Hardware Port: iPhone USB, Device: en7)
+
+(6) Surge
+(Hardware Port: com.nssurge.surge-mac, Device: )
+
+(7) VPN
+(Hardware Port: L2TP, Device: )
+
+(8) Tailscale
+(Hardware Port: io.tailscale.ipn.macsys, Device: )
+
