@@ -131,6 +131,21 @@ codesign --verify --deep --strict --verbose=2 /Applications/JLMS.app
 - notarization 公证
 - staple 公证票据
 
+## Windows 系统代理说明
+
+Windows 平台本身支持系统代理，但如果你使用的是较早构建的测试包，可能会看到类似提示：
+
+```text
+system proxy is only supported on macOS
+```
+
+这不表示 Windows 系统不支持代理，而是当时的 JLMS 版本尚未实现 Windows 的系统代理控制逻辑。
+
+后续版本将改为：
+
+- 在 Windows 上直接读写系统代理设置
+- 前端提示文案改为更准确的跨平台说明
+
 ## 路线图
 
 - **P0 脚手架** — Tauri 骨架 + 内核 sidecar 管理 + 状态仪表盘 ← 进行中

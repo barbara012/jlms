@@ -2,6 +2,18 @@ use std::process::Command;
 
 use serde::Serialize;
 
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::{
+    Foundation::ERROR_FILE_NOT_FOUND,
+    Networking::WinInet::{
+        InternetSetOptionW, INTERNET_OPTION_REFRESH, INTERNET_OPTION_SETTINGS_CHANGED,
+    },
+    System::Registry::{
+        RegCloseKey, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER,
+        KEY_QUERY_VALUE, KEY_SET_VALUE, REG_DWORD, REG_EXPAND_SZ, REG_SZ,
+    },
+};
+
 #[derive(Clone, Debug)]
 pub struct ProxyTarget {
     pub host: String,
@@ -27,6 +39,9 @@ pub struct NetworkDiagnostics {
     pub primary_service: Option<String>,
 }
 
+#[cfg(target_os = "windows")]
+const WINDOWS_INTERNET_SETTINGS: &str = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
+
 #[derive(Debug, PartialEq, Eq)]
 struct ProxyInfo {
     enabled: bool,
@@ -35,6 +50,11 @@ struct ProxyInfo {
 }
 
 pub fn status(target: &ProxyTarget) -> Result<SystemProxyStatus, String> {
+    #[cfg(target_os = "windows")]
+    {
+        return windows_status(target);
+    }
+
     let active = list_active_services()?;
     let service_order = list_service_order()?;
     let services = list_network_services()?;
@@ -69,6 +89,11 @@ pub fn status(target: &ProxyTarget) -> Result<SystemProxyStatus, String> {
 }
 
 pub fn enable(target: &ProxyTarget) -> Result<SystemProxyStatus, String> {
+    #[cfg(target_os = "windows")]
+    {
+        return windows_enable(target);
+    }
+
     let active = list_active_services()?;
     let services = if active.is_empty() {
         list_network_services()?
@@ -90,6 +115,12 @@ pub fn disable(
     target: &ProxyTarget,
     preferred_services: &[String],
 ) -> Result<SystemProxyStatus, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = preferred_services;
+        return windows_disable(target);
+    }
+
     let mut services = known_services(preferred_services)?;
     if services.is_empty() {
         services = matched_services(target)?;
@@ -232,7 +263,7 @@ fn run_command<const N: usize>(args: [&str; N]) -> Result<String, String> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = args;
-        Err("system proxy is only supported on macOS".to_string())
+        Err("network diagnostics are not implemented on this platform yet".to_string())
     }
 }
 
@@ -259,8 +290,252 @@ fn run_command_with_program(program: &str, args: &[&str]) -> Result<String, Stri
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (program, args);
-        Err("system proxy is only supported on macOS".to_string())
+        Err("command execution is not implemented on this platform yet".to_string())
     }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_status(target: &ProxyTarget) -> Result<SystemProxyStatus, String> {
+    let enabled = windows_query_dword("ProxyEnable")?.unwrap_or(0) != 0;
+    let proxy_server = windows_query_string("ProxyServer")?;
+    let matched = enabled
+        && proxy_server
+            .as_deref()
+            .map(|value| windows_proxy_matches_target(value, target))
+            .unwrap_or(false);
+
+    Ok(SystemProxyStatus {
+        enabled: matched,
+        host: target.host.clone(),
+        port: target.port,
+        services: if matched {
+            vec!["Windows".to_string()]
+        } else {
+            Vec::new()
+        },
+        primary_service: matched.then(|| "Windows System Proxy".to_string()),
+        primary_hardware_port: None,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn windows_enable(target: &ProxyTarget) -> Result<SystemProxyStatus, String> {
+    let value = format!(
+        "http={host}:{port};https={host}:{port};socks={host}:{port}",
+        host = target.host,
+        port = target.port
+    );
+    windows_set_string("ProxyServer", &value)?;
+    windows_set_dword("ProxyEnable", 1)?;
+    windows_notify_proxy_changed()?;
+    windows_status(target)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_disable(target: &ProxyTarget) -> Result<SystemProxyStatus, String> {
+    windows_set_dword("ProxyEnable", 0)?;
+    windows_notify_proxy_changed()?;
+    windows_status(target)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_proxy_matches_target(proxy_server: &str, target: &ProxyTarget) -> bool {
+    let expected = format!("{}:{}", target.host, target.port);
+    proxy_server
+        .split(';')
+        .filter_map(|item| {
+            let trimmed = item.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            Some(
+                trimmed
+                    .split_once('=')
+                    .map(|(_, value)| value.trim())
+                    .unwrap_or(trimmed),
+            )
+        })
+        .any(|value| value.eq_ignore_ascii_case(&expected))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_notify_proxy_changed() -> Result<(), String> {
+    unsafe {
+        if InternetSetOptionW(0, INTERNET_OPTION_SETTINGS_CHANGED, std::ptr::null_mut(), 0) == 0 {
+            return Err("notify system proxy change failed".to_string());
+        }
+        if InternetSetOptionW(0, INTERNET_OPTION_REFRESH, std::ptr::null_mut(), 0) == 0 {
+            return Err("refresh system proxy settings failed".to_string());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn windows_open_internet_settings() -> Result<HKEY, String> {
+    let mut key: HKEY = std::ptr::null_mut();
+    let path = windows_wide_null(WINDOWS_INTERNET_SETTINGS);
+    let status = unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            path.as_ptr(),
+            0,
+            KEY_QUERY_VALUE | KEY_SET_VALUE,
+            &mut key,
+        )
+    };
+    if status == 0 {
+        Ok(key)
+    } else {
+        Err(format!("open Windows internet settings failed: {status}"))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_query_dword(name: &str) -> Result<Option<u32>, String> {
+    let key = windows_open_internet_settings()?;
+    let value_name = windows_wide_null(name);
+    let mut ty = 0u32;
+    let mut value = 0u32;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    let status = unsafe {
+        RegQueryValueExW(
+            key,
+            value_name.as_ptr(),
+            std::ptr::null_mut(),
+            &mut ty,
+            (&mut value as *mut u32).cast(),
+            &mut size,
+        )
+    };
+    unsafe {
+        RegCloseKey(key);
+    }
+    if status == ERROR_FILE_NOT_FOUND {
+        return Ok(None);
+    }
+    if status != 0 {
+        return Err(format!("query Windows registry value {name} failed: {status}"));
+    }
+    if ty != REG_DWORD {
+        return Err(format!("unexpected registry type for {name}: {ty}"));
+    }
+    Ok(Some(value))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_query_string(name: &str) -> Result<Option<String>, String> {
+    let key = windows_open_internet_settings()?;
+    let value_name = windows_wide_null(name);
+    let mut ty = 0u32;
+    let mut size = 0u32;
+    let status = unsafe {
+        RegQueryValueExW(
+            key,
+            value_name.as_ptr(),
+            std::ptr::null_mut(),
+            &mut ty,
+            std::ptr::null_mut(),
+            &mut size,
+        )
+    };
+    if status == ERROR_FILE_NOT_FOUND {
+        unsafe {
+            RegCloseKey(key);
+        }
+        return Ok(None);
+    }
+    if status != 0 {
+        unsafe {
+            RegCloseKey(key);
+        }
+        return Err(format!("query Windows registry value {name} failed: {status}"));
+    }
+    if ty != REG_SZ && ty != REG_EXPAND_SZ {
+        unsafe {
+            RegCloseKey(key);
+        }
+        return Err(format!("unexpected registry type for {name}: {ty}"));
+    }
+    let mut buffer = vec![0u16; (size as usize).div_ceil(2)];
+    let status = unsafe {
+        RegQueryValueExW(
+            key,
+            value_name.as_ptr(),
+            std::ptr::null_mut(),
+            &mut ty,
+            buffer.as_mut_ptr().cast(),
+            &mut size,
+        )
+    };
+    unsafe {
+        RegCloseKey(key);
+    }
+    if status != 0 {
+        return Err(format!("read Windows registry value {name} failed: {status}"));
+    }
+    let end = buffer.iter().position(|item| *item == 0).unwrap_or(buffer.len());
+    let value = String::from_utf16_lossy(&buffer[..end]);
+    if value.trim().is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(value))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_set_dword(name: &str, value: u32) -> Result<(), String> {
+    let key = windows_open_internet_settings()?;
+    let value_name = windows_wide_null(name);
+    let bytes = value.to_le_bytes();
+    let status = unsafe {
+        RegSetValueExW(
+            key,
+            value_name.as_ptr(),
+            0,
+            REG_DWORD,
+            bytes.as_ptr(),
+            bytes.len() as u32,
+        )
+    };
+    unsafe {
+        RegCloseKey(key);
+    }
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(format!("set Windows registry value {name} failed: {status}"))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_set_string(name: &str, value: &str) -> Result<(), String> {
+    let key = windows_open_internet_settings()?;
+    let value_name = windows_wide_null(name);
+    let bytes = windows_wide_null(value);
+    let status = unsafe {
+        RegSetValueExW(
+            key,
+            value_name.as_ptr(),
+            0,
+            REG_SZ,
+            bytes.as_ptr().cast(),
+            (bytes.len() * std::mem::size_of::<u16>()) as u32,
+        )
+    };
+    unsafe {
+        RegCloseKey(key);
+    }
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(format!("set Windows registry value {name} failed: {status}"))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_wide_null(value: &str) -> Vec<u16> {
+    value.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 fn measure_ping_latency(host: &str) -> Result<u32, String> {
