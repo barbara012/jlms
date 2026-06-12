@@ -873,6 +873,9 @@ body {
 }
 
 .group-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
   margin-left: 10px;
 }
@@ -881,6 +884,19 @@ body {
   width: 32px;
   height: 32px;
   padding: 0;
+}
+
+.group-actions .favorite-button.active {
+  color: #e0526b;
+}
+
+.group-actions .favorite-button:hover:not(:disabled) {
+  color: #e0526b;
+}
+
+:root[data-theme="dark"] .group-actions .favorite-button.active,
+:root[data-theme="dark"] .group-actions .favorite-button:hover:not(:disabled) {
+  color: #ff6b81;
 }
 
 .chevron {

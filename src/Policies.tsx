@@ -1,9 +1,10 @@
 import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { ChevronDown, ChevronRight, ChevronUp, LoaderCircle, RefreshCw, TimerReset } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, Heart, LoaderCircle, RefreshCw, TimerReset } from "lucide-react";
 import { api, type ProxiesResponse, type ProxyNode } from "./api";
 
 const POLICY_EXPANDED_STORAGE_KEY = "jlms-policy-expanded:v1";
+const POLICY_FAVORITES_STORAGE_KEY = "jlms-policy-favorites:v1";
 const EXPAND_BATCH_SIZE = 6;
 
 type DelayValue = number | null;
@@ -103,6 +104,27 @@ function saveExpandedGroups(expanded: Record<string, boolean>) {
   }
 }
 
+function loadFavoriteGroups() {
+  if (typeof window === "undefined") return {} as Record<string, boolean>;
+  try {
+    const raw = window.localStorage.getItem(POLICY_FAVORITES_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveFavoriteGroups(favorites: Record<string, boolean>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(POLICY_FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
 type DelayProgressPayload = {
   request_id: string;
   name: string;
@@ -139,6 +161,8 @@ export function Policies() {
   const [measureBusy, setMeasureBusy] = useState<string | null>(null);
   const [selecting, setSelecting] = useState<{ group: string; name: string } | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => loadExpandedGroups());
+  const [favorites, setFavorites] = useState<Record<string, boolean>>(() => loadFavoriteGroups());
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [delays, setDelays] = useState<Record<string, DelayValue | undefined>>({});
   const [testing, setTesting] = useState<Record<string, boolean>>({});
   const activeMeasureRequestRef = useRef<string>("");
@@ -146,13 +170,30 @@ export function Policies() {
   const expandFrameRef = useRef<number | null>(null);
   const expandQueueRef = useRef<string[]>([]);
   const expandedSaveTimerRef = useRef<number | null>(null);
+  const favoritesSaveTimerRef = useRef<number | null>(null);
 
-  const groups = useMemo(() => toGroups(data), [data]);
+  const allGroups = useMemo(() => {
+    const base = toGroups(data);
+    return [...base].sort((a, b) => {
+      const aFavorite = favorites[a.name] ? 1 : 0;
+      const bFavorite = favorites[b.name] ? 1 : 0;
+      if (aFavorite !== bFavorite) return bFavorite - aFavorite;
+      return 0;
+    });
+  }, [data, favorites]);
+  const groups = useMemo(
+    () => (favoriteOnly ? allGroups.filter((group) => favorites[group.name]) : allGroups),
+    [allGroups, favoriteOnly, favorites],
+  );
   const allNodes = useMemo(
     () => Array.from(new Set(groups.flatMap((group) => group.nodes))),
     [groups],
   );
   const activeCount = useMemo(() => groups.filter((group) => group.now).length, [groups]);
+  const favoriteCount = useMemo(
+    () => allGroups.filter((group) => favorites[group.name]).length,
+    [allGroups, favorites],
+  );
   const allExpanded = useMemo(
     () => groups.length > 0 && groups.every((group) => expanded[group.name] ?? false),
     [expanded, groups],
@@ -213,6 +254,22 @@ export function Policies() {
   }, [expanded]);
 
   useEffect(() => {
+    if (favoritesSaveTimerRef.current !== null) {
+      window.clearTimeout(favoritesSaveTimerRef.current);
+    }
+    favoritesSaveTimerRef.current = window.setTimeout(() => {
+      saveFavoriteGroups(favorites);
+      favoritesSaveTimerRef.current = null;
+    }, 120);
+    return () => {
+      if (favoritesSaveTimerRef.current !== null) {
+        window.clearTimeout(favoritesSaveTimerRef.current);
+        favoritesSaveTimerRef.current = null;
+      }
+    };
+  }, [favorites]);
+
+  useEffect(() => {
     const unlistenPromise = listen<DelayProgressPayload>("policy://delay-progress", (event) => {
       const payload = event.payload;
       if (!payload || payload.request_id !== activeMeasureRequestRef.current) {
@@ -265,6 +322,10 @@ export function Policies() {
       setExpanded((prev) => ({ ...prev, [name]: !prev[name] }));
     });
   };
+
+  const toggleFavorite = useCallback((name: string) => {
+    setFavorites((prev) => ({ ...prev, [name]: !prev[name] }));
+  }, []);
 
   const setAllExpanded = (value: boolean) => {
     cancelExpandFrames();
@@ -405,8 +466,19 @@ export function Policies() {
       </div>
 
       <div className="toolbar toolbar-flat">
-        <div className="toolbar-note">共 {groups.length} 个策略组，点击分组展开节点；点击节点即可切换。</div>
+        <div className="toolbar-note">
+          共 {allGroups.length} 个策略组，已收藏 {favoriteCount} 个；点击红心可置顶常用分组。
+        </div>
         <div className="toolbar-actions">
+          <div className="segmented mini">
+            <button className={favoriteOnly ? "" : "active"} onClick={() => setFavoriteOnly(false)} disabled={pageBusy}>
+              全部
+            </button>
+            <button className={favoriteOnly ? "active" : ""} onClick={() => setFavoriteOnly(true)} disabled={pageBusy}>
+              <Heart size={12} />
+              收藏
+            </button>
+          </div>
           <button className="sm ghost" onClick={() => void load()} disabled={pageBusy}>
             <RefreshCw size={13} /> 刷新
           </button>
@@ -428,7 +500,9 @@ export function Policies() {
       {error && <div className="banner error">⚠ {error}</div>}
 
       {groups.length === 0 ? (
-        <div className="empty">暂无策略组。请先启用订阅并确保内核已成功启动。</div>
+        <div className="empty">
+          {favoriteOnly ? "还没有收藏的策略组。点击分组右侧红心后，这里会只显示已收藏项。" : "暂无策略组。请先启用订阅并确保内核已成功启动。"}
+        </div>
       ) : (
         <div className="policy-group-list">
           {groups.map((group) => {
@@ -443,9 +517,11 @@ export function Policies() {
                 groupBusy={groupBusy}
                 selectingName={selectingName}
                 measuring={!!measureBusy}
+                favorite={!!favorites[group.name]}
                 delays={delays}
                 testing={testing}
                 onToggle={toggleGroup}
+                onToggleFavorite={toggleFavorite}
                 onMeasure={measureMany}
                 onSelect={selectNode}
               />
@@ -463,9 +539,11 @@ const PolicyGroupSection = memo(function PolicyGroupSection({
   groupBusy,
   selectingName,
   measuring,
+  favorite,
   delays,
   testing,
   onToggle,
+  onToggleFavorite,
   onMeasure,
   onSelect,
 }: {
@@ -474,9 +552,11 @@ const PolicyGroupSection = memo(function PolicyGroupSection({
   groupBusy: boolean;
   selectingName: string | null;
   measuring: boolean;
+  favorite: boolean;
   delays: Record<string, DelayValue | undefined>;
   testing: Record<string, boolean>;
   onToggle: (name: string) => void;
+  onToggleFavorite: (name: string) => void;
   onMeasure: (names: string[], busyKey: string, groupName?: string) => Promise<void>;
   onSelect: (group: string, name: string) => Promise<void>;
 }) {
@@ -496,6 +576,15 @@ const PolicyGroupSection = memo(function PolicyGroupSection({
           {group.now ?? "未选择"}
         </div>
         <div className="group-actions" onClick={(e) => e.stopPropagation()}>
+          <button
+            className={`sm ghost icon-button favorite-button ${favorite ? "active" : ""}`}
+            onClick={() => onToggleFavorite(group.name)}
+            disabled={measuring || !!selectingName}
+            title={favorite ? "取消收藏" : "收藏分组"}
+            aria-label={favorite ? "取消收藏" : "收藏分组"}
+          >
+            <Heart size={15} fill={favorite ? "currentColor" : "none"} />
+          </button>
           <button
             className="sm ghost icon-button"
             onClick={() => void onMeasure(group.nodes, `measure:${group.name}`, group.name)}
