@@ -151,8 +151,8 @@ export function Profiles({ onChanged }: { onChanged?: () => void }) {
       <div className="view">
         <section className="page-hero">
           <div>
-            <div className="activity-kicker">Proxies</div>
-            <h1 className="activity-title">Profile</h1>
+            <div className="activity-kicker">代理</div>
+            <h1 className="activity-title">订阅</h1>
             <p className="page-hero-sub">导入 Clash / mihomo 格式订阅，激活后内核即按其节点与规则运行。</p>
           </div>
         </section>
@@ -167,7 +167,7 @@ export function Profiles({ onChanged }: { onChanged?: () => void }) {
             />
             <div className="toolbar-actions">
               <button onClick={onImport} disabled={busy === "import" || !url.trim()}>
-                {busy === "import" ? "导入中…" : "导入 URL"}
+                {busy === "import" ? "导入中…" : "导入链接"}
               </button>
               <button className="ghost" onClick={onImportFile} disabled={busy === "importfile"}>
                 {busy === "importfile" ? "导入中…" : "本地文件"}

@@ -382,6 +382,14 @@ body {
   overflow-y: auto;
   overflow-y: overlay;
   background: var(--content-bg);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.content::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .window-drag-zone {
@@ -640,7 +648,7 @@ body {
 
 .settings-card-title {
   margin-top: -4px;
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1;
   font-weight: 700;
   color: var(--text);
@@ -686,6 +694,24 @@ body {
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-soft);
+}
+
+.settings-inline-link {
+  display: inline;
+  margin: 0 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.settings-inline-link:hover {
+  color: var(--brand-strong);
 }
 
 .segmented button:disabled {
@@ -1066,6 +1092,10 @@ body {
   opacity: 0.7;
 }
 
+.toggle-button.pending .toggle-hint {
+  color: var(--brand);
+}
+
 .toggle-main {
   display: flex;
   flex-direction: column;
@@ -1229,6 +1259,10 @@ body {
 
 .switch.on::after {
   transform: translateX(16px);
+}
+
+.toggle-button.pending .switch {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 14%, transparent);
 }
 
 /* ============ buttons / inputs ============ */
@@ -2858,7 +2892,7 @@ input:focus {
 .logs-head-main {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 0;
 }
 
 .logs-head-sub {
@@ -2878,11 +2912,51 @@ input:focus {
   color: var(--text);
 }
 
-.logs-empty {
+.logs-body-empty {
   display: flex;
   align-items: center;
-  min-height: 84px;
+  justify-content: center;
+  font-family: inherit;
+}
+
+.logs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  max-width: 420px;
+  min-height: 100%;
+  margin: 0 auto;
+  text-align: center;
   color: var(--text-faint);
+}
+
+.logs-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  border: 1px solid var(--panel-item-border);
+  background: var(--panel-item-bg);
+  color: var(--text-dim);
+}
+
+.logs-empty-title {
+  font-size: 15px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.logs-empty-text {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-faint);
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .log-line {

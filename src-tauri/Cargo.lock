@@ -1830,7 +1830,7 @@ dependencies = [
 
 [[package]]
 name = "jlms"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "image",
  "reqwest 0.12.28",

@@ -197,8 +197,8 @@ export function Requests() {
     <div className="view requests-view">
       <section className="page-hero">
         <div>
-          <div className="activity-kicker">Clients</div>
-          <h1 className="activity-title">Process</h1>
+          <div className="activity-kicker">客户端</div>
+          <h1 className="activity-title">进程</h1>
           <p className="page-hero-sub">实时查看当前连接、命中规则、出站链路和进程来源。</p>
         </div>
       </section>
@@ -213,7 +213,7 @@ export function Requests() {
           <div className="metric-value">{processCount}</div>
         </div>
         <div className="metric">
-          <div className="metric-label">代理 / DIRECT</div>
+          <div className="metric-label">代理 / 直连</div>
           <div className="metric-value">{proxyCount} / {directCount}</div>
         </div>
         <div className="metric">

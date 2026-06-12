@@ -62,6 +62,18 @@ function labelForDelay(delay: DelayValue | undefined) {
   return `${delay} ms`;
 }
 
+function labelForGroupType(type: string) {
+  const normalized = type.trim().toLowerCase();
+  if (normalized === "selector") return "选择器";
+  if (normalized === "urltest" || normalized === "url-test") return "自动测速";
+  if (normalized === "fallback") return "故障转移";
+  if (normalized === "loadbalance" || normalized === "load-balance") return "负载均衡";
+  if (normalized === "direct") return "直连";
+  if (normalized === "reject") return "拒绝";
+  if (normalized === "relay") return "中继";
+  return type;
+}
+
 function allTestingKey(name: string) {
   return `all:${name}`;
 }
@@ -367,8 +379,8 @@ export function Policies() {
     <div className="view policies-view">
       <section className="page-hero">
         <div>
-          <div className="activity-kicker">Proxies</div>
-          <h1 className="activity-title">Policy</h1>
+          <div className="activity-kicker">代理</div>
+          <h1 className="activity-title">策略</h1>
           <p className="page-hero-sub">查看策略组当前节点，手动切换并对候选节点执行延迟测试。</p>
         </div>
       </section>
@@ -475,7 +487,7 @@ const PolicyGroupSection = memo(function PolicyGroupSection({
         <div>
           <div className="group-name">{group.name}</div>
           <div className="group-meta">
-            <span className="group-type">{group.type}</span>
+            <span className="group-type">{labelForGroupType(group.type)}</span>
             <span>{group.nodes.length} 个候选</span>
           </div>
         </div>

@@ -276,7 +276,7 @@ function formatNetworkLabel(proxy: SystemProxyStatus | null) {
     proxy?.primary_hardware_port ??
     proxy?.primary_service ??
     proxy?.services[0] ??
-    (proxy?.enabled ? "System Proxy" : "Current Service");
+    (proxy?.enabled ? "系统代理" : "当前服务");
   const normalized = raw.trim().toLowerCase();
 
   if (
@@ -285,7 +285,7 @@ function formatNetworkLabel(proxy: SystemProxyStatus | null) {
     normalized.includes("wlan") ||
     normalized.includes("airport")
   ) {
-    return "WI-FI";
+    return "无线网络";
   }
 
   if (
@@ -293,14 +293,14 @@ function formatNetworkLabel(proxy: SystemProxyStatus | null) {
     normalized.includes("thunderbolt") ||
     normalized.includes("lan")
   ) {
-    return "ETHERNET";
+    return "有线网络";
   }
 
   if (normalized.includes("cdc device")) {
-    return "WI-FI";
+    return "无线网络";
   }
 
-  return raw.toUpperCase();
+  return raw;
 }
 
 function normalizeSystemProxyError(error: string) {
@@ -439,6 +439,7 @@ export function Overview({ status }: { status: CoreStatus | null }) {
   const [proxies, setProxies] = useState<ProxiesResponse | null>(null);
   const [profiles, setProfiles] = useState<ProfilesIndex | null>(null);
   const [proxyBusy, setProxyBusy] = useState(false);
+  const [proxyPendingEnabled, setProxyPendingEnabled] = useState<boolean | null>(null);
   const [latencyBusy, setLatencyBusy] = useState(false);
   const [latencyPanelOpen, setLatencyPanelOpen] = useState(false);
   const [lastLatencyMeasuredAt, setLastLatencyMeasuredAt] = useState<number | null>(null);
@@ -533,6 +534,7 @@ export function Overview({ status }: { status: CoreStatus | null }) {
   const loadSystemProxy = useCallback(async () => {
     try {
       setProxy(await api.systemProxyStatus());
+      setProxyPendingEnabled(null);
     } catch (e) {
       setProxyError(normalizeSystemProxyError(String(e)));
     }
@@ -588,6 +590,7 @@ export function Overview({ status }: { status: CoreStatus | null }) {
   useEffect(() => {
     const proxyPromise = listen<SystemProxyStatus>("system-proxy://changed", (event) => {
       setProxy(event.payload);
+      setProxyPendingEnabled(null);
       setProxyError(null);
     });
     const selectionPromise = listen<ProxySelectionChangedPayload>("proxy://selection-changed", (event) => {
@@ -604,12 +607,33 @@ export function Overview({ status }: { status: CoreStatus | null }) {
 
   const toggleSystemProxy = async () => {
     if (proxyBusy) return;
+    const previousProxy = proxy;
+    const nextEnabled = !(previousProxy?.enabled ?? false);
     setProxyBusy(true);
+    setProxyPendingEnabled(nextEnabled);
     setProxyError(null);
+    setProxy((prev) =>
+      prev
+        ? {
+            ...prev,
+            enabled: nextEnabled,
+          }
+        : {
+            enabled: nextEnabled,
+            host: "127.0.0.1",
+            port: status?.mixed_port ?? 0,
+            services: [],
+            primary_service: null,
+            primary_hardware_port: null,
+          },
+    );
     try {
-      const next = await api.systemProxySet(!(proxy?.enabled ?? false));
+      const next = await api.systemProxySet(nextEnabled);
       setProxy(next);
+      setProxyPendingEnabled(null);
     } catch (e) {
+      setProxy(previousProxy);
+      setProxyPendingEnabled(null);
       setProxyError(normalizeSystemProxyError(String(e)));
     } finally {
       setProxyBusy(false);
@@ -667,6 +691,15 @@ export function Overview({ status }: { status: CoreStatus | null }) {
   const maxBarValue = useMemo(() => Math.max(1, ...barValues), [barValues]);
   const profileName = activeProfile?.name ?? "未启用";
   const serviceName = formatNetworkLabel(proxy);
+  const displayedProxyEnabled = proxyPendingEnabled ?? (proxy?.enabled ?? false);
+  const systemProxyHint =
+    proxyPendingEnabled !== null
+      ? proxyPendingEnabled
+        ? "正在开启系统代理…"
+        : "正在关闭系统代理…"
+      : proxy?.enabled
+        ? `${proxy.host}:${proxy.port}${proxy.services.length ? ` · ${proxy.services.length} 个服务` : ""}`
+        : "关闭";
   const defaultOutboundChain =
     defaultOutbound.chain.length > 0 ? defaultOutbound.chain.join(" -> ") : defaultOutbound.node;
   const routerLatency =
@@ -678,9 +711,9 @@ export function Overview({ status }: { status: CoreStatus | null }) {
       ? `${latencyDiagnostics.dns_ms} ms`
       : "—";
   const headerFacts = [
-    { label: "Network", value: serviceName },
+    { label: "网络", value: serviceName },
     { label: "Profile", value: profileName },
-    { label: "Outbound Mode", value: MODE_LABEL[status?.mode ?? ""] ?? "Rule-Based Proxy" },
+    { label: "出站模式", value: MODE_LABEL[status?.mode ?? ""] ?? "规则" },
     { label: "Controller", value: status?.controller ?? "127.0.0.1:9090" },
   ];
 
@@ -688,8 +721,8 @@ export function Overview({ status }: { status: CoreStatus | null }) {
     <div className="view overview-view">
       <section className="activity-head">
         <div>
-          <div className="activity-kicker">Activity</div>
-          <h1 className="activity-title">Overview</h1>
+          <div className="activity-kicker">概览</div>
+          <h1 className="activity-title">概览</h1>
         </div>
       </section>
 
@@ -707,7 +740,7 @@ export function Overview({ status }: { status: CoreStatus | null }) {
           <section className="surge-card surge-latency-card">
             <div className="surge-card-head">
               <div>
-                <div className="surge-card-label">Internet Latency</div>
+                <div className="surge-card-label">网络延迟</div>
                 <div className="surge-latency-value">
                   {defaultOutbound.delay ?? 0}
                   <small>ms</small>
@@ -715,16 +748,16 @@ export function Overview({ status }: { status: CoreStatus | null }) {
               </div>
               <div className="surge-latency-actions">
                 <button className="sm ghost" disabled={latencyBusy} onClick={() => void loadLatencyDiagnostics()}>
-                  {latencyBusy ? "Diagnosing..." : "Diagnostics"}
+                  {latencyBusy ? "诊断中…" : "诊断"}
                 </button>
                 <button className="sm ghost" disabled={latencyBusy} onClick={() => setLatencyPanelOpen(true)}>
-                  Details
+                  详情
                 </button>
               </div>
             </div>
             <div className="surge-latency-footer">
               <div className="surge-latency-meta">
-                <span className="mini-label">Router</span>
+                <span className="mini-label">网关</span>
                 <b>{routerLatency}</b>
               </div>
               <div className="surge-latency-meta">
@@ -740,21 +773,21 @@ export function Overview({ status }: { status: CoreStatus | null }) {
 
           <section className="surge-card surge-connection-card">
             <div className="surge-card-head">
-              <div className="surge-card-label">Active Connection</div>
+              <div className="surge-card-label">活动连接</div>
               <span className="surge-dot" />
             </div>
             <div className="surge-connection-value">{connCount}</div>
             <div className="surge-mini-stats triple">
               <div className="surge-mini-stat">
-                <span className="mini-label">Processes</span>
+                <span className="mini-label">进程</span>
                 <b>{uniqueProcesses}</b>
               </div>
               <div className="surge-mini-stat">
-                <span className="mini-label">Devices</span>
+                <span className="mini-label">设备</span>
                 <b>{uniqueDevices}</b>
               </div>
               <div className="surge-mini-stat">
-                <span className="mini-label">Proxy Rules</span>
+                <span className="mini-label">Policy</span>
                 <b>{uniquePolicies}</b>
               </div>
             </div>
@@ -762,13 +795,13 @@ export function Overview({ status }: { status: CoreStatus | null }) {
 
           <section className="surge-card surge-total-card">
             <div className="surge-card-head">
-              <div className="surge-card-label">Total Traffic</div>
+              <div className="surge-card-label">Traffic</div>
               <div className="segmented mini">
                 <button className={totalRange === "today" ? "active" : ""} onClick={() => setTotalRange("today")}>
-                  TODAY
+                  今日
                 </button>
                 <button className={totalRange === "month" ? "active" : ""} onClick={() => setTotalRange("month")}>
-                  MONTH
+                  本月
                 </button>
               </div>
             </div>
@@ -778,14 +811,14 @@ export function Overview({ status }: { status: CoreStatus | null }) {
             </div>
             <div className="surge-total-meta">
               <div className="surge-total-side">
-                <span className="mini-label">Direct</span>
+                <span className="mini-label">直连</span>
                 <b>
                   {directTotal.v}
                   <small>{directTotal.u}</small>
                 </b>
               </div>
               <div className="surge-total-side right">
-                <span className="mini-label">Proxy</span>
+                <span className="mini-label">代理</span>
                 <b>
                   {proxyTotal.v}
                   <small>{proxyTotal.u}</small>
@@ -805,7 +838,7 @@ export function Overview({ status }: { status: CoreStatus | null }) {
           <div className="overview-speed-row">
             <section className="surge-card surge-speed-card upload">
               <div className="surge-speed-head">
-                <div className="surge-card-label">Upload</div>
+                <div className="surge-card-label">上传</div>
                 <span className="surge-speed-scale">
                   {uploadPeak.v} {uploadPeak.u}/s
                 </span>
@@ -820,7 +853,7 @@ export function Overview({ status }: { status: CoreStatus | null }) {
 
             <section className="surge-card surge-speed-card download">
               <div className="surge-speed-head">
-                <div className="surge-card-label">Download</div>
+                <div className="surge-card-label">下载</div>
                 <span className="surge-speed-scale">
                   {downloadPeak.v} {downloadPeak.u}/s
                 </span>
@@ -839,13 +872,13 @@ export function Overview({ status }: { status: CoreStatus | null }) {
               <div className="surge-card-label">Traffic</div>
               <div className="segmented mini">
                 <button className={trafficViewMode === "all" ? "active" : ""} onClick={() => setTrafficViewMode("all")}>
-                  ALL
+                  全部
                 </button>
                 <button
                   className={trafficViewMode === "proxy" ? "active" : ""}
                   onClick={() => setTrafficViewMode("proxy")}
                 >
-                  PROXY
+                  代理
                 </button>
               </div>
             </div>
@@ -861,19 +894,19 @@ export function Overview({ status }: { status: CoreStatus | null }) {
                   className={trafficContentTab === "client" ? "active" : ""}
                   onClick={() => setTrafficContentTab("client")}
                 >
-                  CLIENT
+                  客户端
                 </button>
                 <button
                   className={trafficContentTab === "domain" ? "active" : ""}
                   onClick={() => setTrafficContentTab("domain")}
                 >
-                  DOMAIN
+                  Domain
                 </button>
                 <button
                   className={trafficContentTab === "policy" ? "active" : ""}
                   onClick={() => setTrafficContentTab("policy")}
                 >
-                  POLICY
+                  Policy
                 </button>
               </div>
               {trafficRows.length === 0 ? (
@@ -908,13 +941,10 @@ export function Overview({ status }: { status: CoreStatus | null }) {
       <div className="toggles">
         <ToggleItem
           label="系统代理"
-          hint={
-            proxy?.enabled
-              ? `${proxy.host}:${proxy.port}${proxy.services.length ? ` · ${proxy.services.length} 个服务` : ""}`
-              : "关闭"
-          }
-          checked={proxy?.enabled ?? false}
+          hint={systemProxyHint}
+          checked={displayedProxyEnabled}
           disabled={proxyBusy}
+          pending={proxyPendingEnabled !== null}
           onToggle={() => void toggleSystemProxy()}
         />
         <ToggleStub label="增强模式" hint="TUN / 接管更多系统流量" />
@@ -926,26 +956,26 @@ export function Overview({ status }: { status: CoreStatus | null }) {
           <section className="latency-panel" onClick={(e) => e.stopPropagation()}>
             <div className="latency-panel-head">
               <div>
-                <div className="latency-panel-kicker">Diagnostics</div>
-                <h3>Internet Latency</h3>
+                <div className="latency-panel-kicker">诊断</div>
+                <h3>网络延迟</h3>
               </div>
               <button className="sm ghost" onClick={() => setLatencyPanelOpen(false)}>
-                Close
+                关闭
               </button>
             </div>
             <div className="latency-panel-grid">
               <div className="latency-panel-item">
-                <span>Router</span>
+                <span>网关</span>
                 <b>{routerLatency}</b>
                 <small>{latencyDiagnostics?.gateway ?? "未识别默认网关"}</small>
               </div>
               <div className="latency-panel-item">
                 <span>DNS</span>
                 <b>{dnsLatency}</b>
-                <small>{latencyDiagnostics?.dns_server ?? "未识别 DNS Server"}</small>
+                <small>{latencyDiagnostics?.dns_server ?? "未识别 DNS 服务器"}</small>
               </div>
               <div className="latency-panel-item wide">
-                <span>默认出口链</span>
+                <span>Outbound Chain</span>
                 <b>{defaultOutbound.node}</b>
                 <small>{defaultOutboundChain}</small>
               </div>
@@ -961,7 +991,7 @@ export function Overview({ status }: { status: CoreStatus | null }) {
                 disabled={latencyBusy}
                 onClick={() => void loadLatencyDiagnostics()}
               >
-                {latencyBusy ? "Diagnosing..." : "Retry"}
+                {latencyBusy ? "诊断中…" : "重新测量"}
               </button>
             </div>
           </section>
@@ -1112,18 +1142,20 @@ function ToggleItem({
   hint,
   checked,
   disabled,
+  pending,
   onToggle,
 }: {
   label: string;
   hint: string;
   checked: boolean;
   disabled?: boolean;
+  pending?: boolean;
   onToggle: () => void;
 }) {
   return (
     <button
       type="button"
-      className={`toggle-button ${disabled ? "disabled" : ""}`}
+      className={`toggle-button ${disabled ? "disabled" : ""} ${pending ? "pending" : ""}`}
       onClick={onToggle}
       disabled={disabled}
     >

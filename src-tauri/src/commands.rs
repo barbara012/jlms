@@ -5,7 +5,7 @@ use serde_yaml::Value;
 use std::collections::HashMap;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
-use tokio::task::JoinSet;
+use tokio::task::{spawn_blocking, JoinSet};
 
 use crate::engine::api::Controller;
 use crate::engine::manager::CoreManager;
@@ -108,12 +108,11 @@ pub async fn proxy_select_with_handle(
     Ok(())
 }
 
-pub fn set_system_proxy_with_handle(
+fn set_system_proxy_for_target(
     app: &AppHandle,
-    manager: &CoreManager,
+    target: ProxyTarget,
     enabled: bool,
 ) -> Result<SystemProxyStatus, String> {
-    let target = proxy_target(manager);
     let status = if enabled {
         let status = system_proxy::enable(&target)?;
         settings::save_proxy_services(app, &status.services)?;
@@ -124,8 +123,20 @@ pub fn set_system_proxy_with_handle(
         settings::save_proxy_services(app, &[])?;
         status
     };
+    Ok(status)
+}
+
+pub async fn set_system_proxy_with_target_async(
+    app: AppHandle,
+    target: ProxyTarget,
+    enabled: bool,
+) -> Result<SystemProxyStatus, String> {
+    let worker_app = app.clone();
+    let status = spawn_blocking(move || set_system_proxy_for_target(&worker_app, target, enabled))
+        .await
+        .map_err(|e| format!("join system proxy task: {e}"))??;
     let _ = app.emit("system-proxy://changed", &status);
-    request_tray_menu_sync(app);
+    request_tray_menu_sync(&app);
     Ok(status)
 }
 
@@ -358,12 +369,13 @@ pub fn system_proxy_status(manager: State<'_, CoreManager>) -> Result<SystemProx
 }
 
 #[tauri::command]
-pub fn system_proxy_set(
+pub async fn system_proxy_set(
     app: AppHandle,
     manager: State<'_, CoreManager>,
     enabled: bool,
 ) -> Result<SystemProxyStatus, String> {
-    set_system_proxy_with_handle(&app, &manager, enabled)
+    let target = proxy_target(&manager);
+    set_system_proxy_with_target_async(app, target, enabled).await
 }
 
 #[tauri::command]
