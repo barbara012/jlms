@@ -285,6 +285,15 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const preventContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+    };
+
+    document.addEventListener("contextmenu", preventContextMenu);
+    return () => document.removeEventListener("contextmenu", preventContextMenu);
+  }, []);
+
+  useEffect(() => {
     void getVersion()
       .then((version) => setAppVersion(normalizeVersion(version)))
       .catch(() => {
