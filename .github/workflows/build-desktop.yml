@@ -176,9 +176,67 @@ jobs:
           path: ${{ matrix.asset_glob }}
           if-no-files-found: error
 
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jlms-*-${{ github.ref_name }}
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          current_tag="${GITHUB_REF_NAME}"
+          previous_tag="$(git tag --sort=-version:refname | grep -Fxv "$current_tag" | head -n 1 || true)"
+          compare_url=""
+          if [[ -n "$previous_tag" ]]; then
+            range="${previous_tag}..${current_tag}"
+            compare_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${previous_tag}...${current_tag}"
+          else
+            range="${current_tag}"
+          fi
+
+          commits="$(git log "$range" --no-merges --pretty=format:'- %s (%h)' || true)"
+
+          {
+            echo "## 更新日志"
+            if [[ -n "$commits" ]]; then
+              echo "$commits"
+            else
+              echo "- 版本发布"
+            fi
+            echo
+            echo "## 下载包"
+            echo "- macOS Apple Silicon: \`JLMS_${current_tag#v}_aarch64.dmg\`"
+            echo "- macOS Intel: \`JLMS_${current_tag#v}_x64.dmg\`"
+            echo "- Windows 安装包: \`JLMS_${current_tag#v}_x64-setup.exe\`"
+            echo "- Windows MSI: \`JLMS_${current_tag#v}_x64_en-US.msi\`"
+            if [[ -n "$compare_url" ]]; then
+              echo
+              echo "**完整对比**: ${compare_url}"
+            fi
+          } > RELEASE_NOTES.md
+
       - name: Publish release assets
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
-          files: ${{ matrix.asset_glob }}
+          name: ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            release-assets/**/*.msi
+            release-assets/**/*.exe
+            release-assets/**/*.zip
+            release-assets/**/*.app.tar.gz
+            release-assets/**/*.dmg
