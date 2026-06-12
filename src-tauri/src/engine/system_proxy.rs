@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 use serde::Serialize;
@@ -49,12 +50,13 @@ struct ProxyInfo {
     port: Option<u16>,
 }
 
+#[cfg(target_os = "windows")]
 pub fn status(target: &ProxyTarget) -> Result<SystemProxyStatus, String> {
-    #[cfg(target_os = "windows")]
-    {
-        return windows_status(target);
-    }
+    windows_status(target)
+}
 
+#[cfg(not(target_os = "windows"))]
+pub fn status(target: &ProxyTarget) -> Result<SystemProxyStatus, String> {
     let active = list_active_services()?;
     let service_order = list_service_order()?;
     let services = list_network_services()?;
@@ -88,12 +90,13 @@ pub fn status(target: &ProxyTarget) -> Result<SystemProxyStatus, String> {
     })
 }
 
+#[cfg(target_os = "windows")]
 pub fn enable(target: &ProxyTarget) -> Result<SystemProxyStatus, String> {
-    #[cfg(target_os = "windows")]
-    {
-        return windows_enable(target);
-    }
+    windows_enable(target)
+}
 
+#[cfg(not(target_os = "windows"))]
+pub fn enable(target: &ProxyTarget) -> Result<SystemProxyStatus, String> {
     let active = list_active_services()?;
     let services = if active.is_empty() {
         list_network_services()?
@@ -111,16 +114,20 @@ pub fn enable(target: &ProxyTarget) -> Result<SystemProxyStatus, String> {
     status(target)
 }
 
+#[cfg(target_os = "windows")]
 pub fn disable(
     target: &ProxyTarget,
     preferred_services: &[String],
 ) -> Result<SystemProxyStatus, String> {
-    #[cfg(target_os = "windows")]
-    {
-        let _ = preferred_services;
-        return windows_disable(target);
-    }
+    let _ = preferred_services;
+    windows_disable(target)
+}
 
+#[cfg(not(target_os = "windows"))]
+pub fn disable(
+    target: &ProxyTarget,
+    preferred_services: &[String],
+) -> Result<SystemProxyStatus, String> {
     let mut services = known_services(preferred_services)?;
     if services.is_empty() {
         services = matched_services(target)?;
@@ -361,10 +368,22 @@ fn windows_proxy_matches_target(proxy_server: &str, target: &ProxyTarget) -> boo
 #[cfg(target_os = "windows")]
 fn windows_notify_proxy_changed() -> Result<(), String> {
     unsafe {
-        if InternetSetOptionW(0, INTERNET_OPTION_SETTINGS_CHANGED, std::ptr::null_mut(), 0) == 0 {
+        if InternetSetOptionW(
+            std::ptr::null(),
+            INTERNET_OPTION_SETTINGS_CHANGED,
+            std::ptr::null_mut(),
+            0,
+        ) == 0
+        {
             return Err("notify system proxy change failed".to_string());
         }
-        if InternetSetOptionW(0, INTERNET_OPTION_REFRESH, std::ptr::null_mut(), 0) == 0 {
+        if InternetSetOptionW(
+            std::ptr::null(),
+            INTERNET_OPTION_REFRESH,
+            std::ptr::null_mut(),
+            0,
+        ) == 0
+        {
             return Err("refresh system proxy settings failed".to_string());
         }
     }
